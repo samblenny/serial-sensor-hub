@@ -5,9 +5,9 @@ package main
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"io"
 	"log"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"

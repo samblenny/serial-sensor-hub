@@ -1,0 +1,6 @@
+{
+  "comment": "EDIT THE IP ADDRESS TO MATCH YOUR SERVER",
+  "server": "192.168.0.250:6667",
+  "nick": "sensorbot",
+  "channel": "#sensors"
+}
