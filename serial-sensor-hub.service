@@ -1,0 +1,18 @@
+# To install serial-sensor-hub as a systemd service in Raspbian
+# 1. Copy this file to /etc/systemd/service/serial-sensor-hub.service
+# 2. `sudo systemctl enable serial-sensor-hub`
+# 3. `sudo systemctl start serial-sensor-hub`
+
+[Unit]
+Description=Serial Sensor Hub
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/go/bin"
+ExecStart=/home/pi/go/serial-sensor-hub/serial-sensor-hub
+
+[Install]
+WantedBy=multi-user.target
