@@ -155,6 +155,8 @@ func main() {
 		}
 		sensorLogChan <- sensorData
 	}
+	log.Print("Sensor channel closed, main() exiting in 15 seconds...")
+	time.Sleep(15 * time.Second)
 
 	close(reportChan)
 }

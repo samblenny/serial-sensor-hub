@@ -16,6 +16,8 @@ User=pi
 WorkingDirectory=/home/pi/serial-sensor-hub
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ExecStart=/home/pi/serial-sensor-hub/serial-sensor-hub
+Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target

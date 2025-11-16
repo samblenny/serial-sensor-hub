@@ -61,6 +61,7 @@ func serialSttyConfig(port string) error {
 	cmd = exec.Command("stty", "-f", port, "115200", "clocal", "cread",
 		"-crtscts", "cs8", "-hupcl", "-cstopb", "-parenb", "-echo")
 	if err := cmd.Run(); err != nil {
+		// WARNING: This will cause the server process to exit
 		return fmt.Errorf("stty failed on %s: %w", port, err)
 	}
 
@@ -91,7 +92,8 @@ func serialMonitor(port string, out chan<- string) error {
 	if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
 		return err
 	}
-	return fmt.Errorf("EOF for %s", port)
+	log.Printf("Serial port EOF for %s", port)
+	return nil
 }
 
 // Establish and maintain a serial connection to the serial sensor. If you
