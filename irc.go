@@ -186,10 +186,12 @@ ConnectLoop:
 				case "005":
 				case "250":
 				case "251":
+				case "252":
 				case "254":
 				case "255":
 				case "265":
 				case "266":
+				case "333":
 				case "353":
 				case "366":
 

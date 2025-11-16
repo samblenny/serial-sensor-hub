@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var sensorReportRE = regexp.MustCompile(
@@ -24,7 +25,8 @@ var sensorReportRE = regexp.MustCompile(
 // main() reads serial sensor reports, maintains a 24-hour rolling history per
 // node, and generates IRC bot summaries for nodes IDs 1 and 2.
 //
-// Sensor reports are expected in this format:
+// Sensor reports are expected in this format (NOTE: timestamp should be
+// monotonic increasing, but don't trust it to accurately reflect clock time):
 //
 //	<PROTOCOL>: <RSSI>, <SNR>, <NODE_ID>, <TIMESTAMP>, <BATTERY_V>, <TEMP_F>, <OK/DUP>
 //
@@ -68,10 +70,12 @@ func main() {
 	// Channels
 	sensorChan := make(chan string, 32)
 	reportChan := make(chan string, 32)
+	sensorLogChan := make(chan SensorData, 32)
 
-	// Start serial port sensor monitor and IRC bot
+	// Start serial port sensor monitor, IRC bot, and sensor data logger
 	go SerialConnect(sensorChan)
 	go IRCBot(ctx, cfg, reportChan)
+	go startLogger(sensorLogChan)
 
 	// This map maintains a ReportHistory for each nodeID to compute 24-hour
 	// rolling min/max temperature statistics
@@ -87,6 +91,8 @@ func main() {
 			continue
 		}
 
+		rssi := matches[2]
+		snr := matches[3]
 		node := matches[4]
 		okdup := matches[8]
 		if okdup != "OK" {
@@ -112,7 +118,8 @@ func main() {
 		}
 
 		// Add report to node's rolling 24h history and recompute min/max
-		h.Add(batteryV, tempF)
+		timestamp := time.Now()
+		h.Add(timestamp, batteryV, tempF)
 
 		// Prepare summary for nodes 1 and 2
 		lines := []string{}
@@ -133,8 +140,20 @@ func main() {
 					nodeID, timestampStr))
 		}
 
+		// Send report summary by IRC
 		summary := "!pre " + strings.Join(lines, "")
 		reportChan <- summary
+
+		// Log the report to disk
+		sensorData := SensorData{
+			Timestamp: timestamp,
+			Node:      node,
+			RSSI:      rssi,
+			SNR:       snr,
+			BatteryV:  batteryV,
+			TempF:     tempF,
+		}
+		sensorLogChan <- sensorData
 	}
 
 	close(reportChan)

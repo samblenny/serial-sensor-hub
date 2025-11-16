@@ -22,10 +22,10 @@ type ReportHistory struct {
 
 // Add a new report and prune anything older than 24 hours.
 // Also recomputes min and max temperatures after pruning.
-func (h *ReportHistory) Add(batteryV, tempF float64) {
+func (h *ReportHistory) Add(timestamp time.Time, batteryV, tempF float64) {
 	// Build and append the new report
 	r := Report{
-		Timestamp: time.Now(),
+		Timestamp: timestamp,
 		TempF:     tempF,
 		BatteryV:  batteryV,
 	}
