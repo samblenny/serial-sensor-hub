@@ -151,9 +151,10 @@ ConnectLoop:
 				conn.Close()
 				return
 			case msg := <-in:
-				// Handle a message from the input channel (forward to IRC)
+				// Handle a message from the input channel by setting the
+				// topic of the configured channel
 				if registered && joined {
-					ircMsg := fmt.Sprintf("PRIVMSG %s :%s", cfg.Channel, msg)
+					ircMsg := fmt.Sprintf("TOPIC %s :%s", cfg.Channel, msg)
 					if err := ircSend(conn, ircMsg); err != nil {
 						continue ConnectLoop
 					}
