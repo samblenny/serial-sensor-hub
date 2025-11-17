@@ -122,8 +122,9 @@ func FormatReportSummary(histories NodeHistories) string {
 			continue
 		}
 		last := h.Reports[len(h.Reports)-1]
-		// Format timestamp like "Nov15 05:30"
-		timestampStr := last.Timestamp.Format("Jan02 15:04")
+		// Format timestamp like "Nov15 05:30", and be sure to use local time
+		localTimestamp := last.Timestamp.In(time.Local)
+		timestampStr := localTimestamp.Format("Jan02 15:04")
 		lines = append(lines,
 			fmt.Sprintf("/%.0f %.0f %.0f %.0f/  %s  %s",
 				last.TempF, 100*last.BatteryV, h.MinTempF, h.MaxTempF,
