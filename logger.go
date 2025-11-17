@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"sync"
+	"path/filepath"
 	"time"
 )
 
@@ -19,39 +19,88 @@ type SensorData struct {
 	TempF     float64
 }
 
-var logMutex sync.Mutex
+type CurrentLogFile struct {
+	FilePath string
+	File     *os.File
+}
 
-func startLogger(sensorLogChan <-chan SensorData) {
-	logDir := "./logs"
+// Does log file already have a non-zero amount of data?
+func (c *CurrentLogFile) IsEmpty() bool {
+	if c.File != nil {
+		if stat, err := c.File.Stat(); err == nil {
+			return stat.Size() == 0
+		}
+	}
+	return false
+}
 
-	// Try to ensure logs directory exists, create it if not
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		log.Printf("ERROR: Failed to create sensor logs directory: %v", err)
-		return
+// Prepare for logging to new file, closing the old one if needed
+func (c *CurrentLogFile) Rotate(filePath string) error {
+	// Close old file if it exists
+	if c.File != nil {
+		c.File.Close()
 	}
 
-	var currentFileName string
-	var logFile *os.File
-	ticker := time.NewTicker(time.Hour)
-	defer ticker.Stop()
+	// Open new file
+	var err error
+	c.File, err = os.OpenFile(filePath,
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
 
-	// Start goroutine to watch the clock and rotate the log file when needed
-	// (rotation happens daily at midnight local time)
-	go func() {
-		for range ticker.C {
-			rotateLogFile(&currentFileName, &logFile)
-		}
-	}()
+	// Update current file name
+	c.FilePath = filePath
+	return nil
+}
 
-	// On startup, poke the log file rotater to open or create log file
-	rotateLogFile(&currentFileName, &logFile)
+// Log sensor data from incoming channel to daily rotating log file
+// CAUTION: This will return early for file IO errors
+func startLogger(sensorLogChan <-chan SensorData) {
+	// Build absolute path for ./logs under server's current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Printf("ERROR: Checking working directory for ./logs failed")
+		return // CAUTION!
+	}
+	logDir := filepath.Join(cwd, "logs")
 
-	// Main loop to write sensor data to log
+	// Ensure logs directory exists, creating it if needed
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		log.Printf("ERROR: Creating sensor logs directory failed: %v", err)
+		return // CAUTION!
+	}
+	log.Printf("INFO: Sensor data log directory: %s", logDir)
+
+	logFile := CurrentLogFile{}
+
+	// Log incoming sensor data channel messages
 	for sensorData := range sensorLogChan {
-		// Lock the mutex to prevent race with log file rotation
-		logMutex.Lock()
 
-		// Write to the current log file
+		// This is what the log filename should be based on current time
+		logFilePath := filepath.Join(logDir,
+			fmt.Sprintf("%s-sensors.log", time.Now().Format("2006-01-02")))
+
+		// Make sure the correct log file is open and ready
+		if logFile.File == nil || logFilePath != logFile.FilePath {
+			if err := logFile.Rotate(logFilePath); err != nil {
+				log.Print("ERROR: Rotating log file failed: %v", err)
+				return // CAUTION!
+			}
+			log.Printf("INFO: Logging sensor data to: %s", logFilePath)
+
+			// Only write CSV header if this is a new empty file. For example,
+			// the server could be stopped then restarted on the same day.
+			if logFile.IsEmpty() {
+				header := "Timestamp,Node,RSSI,SNR,BatteryV,TempF\n"
+				if _, err := logFile.File.WriteString(header); err != nil {
+					log.Print("ERROR: Writing sensor log data failed: %v", err)
+					return // CAUTION!
+				}
+			}
+		}
+
+		// Write sensor data to log file
 		logLine := fmt.Sprintf("%s,%s,%s,%s,%.2f,%.0f\n",
 			sensorData.Timestamp.UTC().Format(time.RFC3339),
 			sensorData.Node,
@@ -59,56 +108,9 @@ func startLogger(sensorLogChan <-chan SensorData) {
 			sensorData.SNR,
 			sensorData.BatteryV,
 			sensorData.TempF)
-		if logFile != nil {
-			if _, err := (*logFile).WriteString(logLine); err != nil {
-				// If write fails, silently ignore it (but unlock mutex!)
-				logMutex.Unlock()
-				continue
-			}
+		if _, err := logFile.File.WriteString(logLine); err != nil {
+			log.Print("ERROR: Writing sensor log data failed: %v", err)
+			return // CAUTION!
 		}
-		logMutex.Unlock()
-	}
-}
-
-// Sensor data log file rotates at midnight local time
-func rotateLogFile(currentFileName *string, logFile **os.File) {
-	// This is what the log filename should be based on current time
-	newFileName := fmt.Sprintf("./logs/%s-sensors.log",
-		time.Now().Format("2006-01-02"))
-
-	// If the log file isn't already open, or if the filename is wrong, then
-	// open the correct log file
-	if *logFile == nil || newFileName != *currentFileName {
-		// Use mutex to prevent race condition with sensor data writer
-		logMutex.Lock()
-
-		// Close old file if it exists
-		if *logFile != nil {
-			(*logFile).Close()
-		}
-
-		// Open new file
-		var err error
-		*logFile, err = os.OpenFile(newFileName,
-			os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			log.Printf("WARN: Failed to open %s: %v", newFileName, err)
-			logMutex.Unlock()
-			return
-		}
-
-		// Write CSV header only if the file is new (size==0)
-		if stat, _ := (*logFile).Stat(); stat.Size() == 0 {
-			header := "Timestamp,Node,RSSI,SNR,BatteryV,TempF\n"
-			if _, err := (*logFile).WriteString(header); err != nil {
-				logMutex.Unlock()
-				return
-			}
-		}
-
-		// Update current file name
-		*currentFileName = newFileName
-		log.Printf("Logging sensor data to: %s", newFileName)
-		logMutex.Unlock()
 	}
 }

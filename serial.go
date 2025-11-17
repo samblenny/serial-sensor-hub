@@ -92,7 +92,7 @@ func serialMonitor(port string, out chan<- string) error {
 	if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
 		return err
 	}
-	log.Printf("Serial port EOF for %s", port)
+	log.Printf("DEBUG: Serial port EOF for %s", port)
 	return nil
 }
 
@@ -109,9 +109,9 @@ func SerialConnect(out chan<- string) {
 		}
 
 		// Monitor the serial port until there's an EOF or IO error
-		log.Printf("Monitoring %v", port)
+		log.Printf("INFO: Monitoring %v", port)
 		if err := serialMonitor(port, out); err != nil {
-			log.Printf("%s disconnected: %v", port, err)
+			log.Printf("INFO: %s disconnected: %v", port, err)
 		}
 		time.Sleep(time.Second)
 	}

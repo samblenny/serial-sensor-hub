@@ -57,10 +57,12 @@ var sensorReportRE = regexp.MustCompile(
 //
 //	!pre /63 379 63 63/ 1  Nov15 01:59/67 389 67 67/ 2  Nov15 01:58
 func main() {
+	log.Printf("INFO: Starting serial-sensor-hub")
+
 	// Load configuration file
 	cfg, err := IRCLoadConfig("config.json")
 	if err != nil {
-		log.Fatalf("Failed to load IRC config: %v", err)
+		log.Fatalf("ERROR: Failed to load IRC config: %v", err)
 	}
 
 	// Shutdown context for clean exit (in case of Ctrl-C or whatever)
@@ -87,7 +89,7 @@ func main() {
 
 		matches := sensorReportRE.FindStringSubmatch(report)
 		if matches == nil {
-			log.Printf("Bad sensor report format: %s", report)
+			log.Printf("WARN: SENSOR: Bad report format: %s", report)
 			continue
 		}
 
@@ -96,17 +98,17 @@ func main() {
 		node := matches[4]
 		okdup := matches[8]
 		if okdup != "OK" {
-			log.Printf("Duplicate: %s", report)
+			log.Printf("INFO: SENSOR: Duplicate: %s", report)
 			continue
 		}
 		batteryV, err := strconv.ParseFloat(matches[6], 64)
 		if err != nil {
-			log.Printf("Bad battery voltage value: %s", matches[6])
+			log.Printf("WARN: SENSOR: Bad battery voltage: %s", matches[6])
 			continue
 		}
 		tempF, err := strconv.ParseFloat(matches[7], 64)
 		if err != nil {
-			log.Printf("Bad temperature F value: %s", matches[7])
+			log.Printf("WARN: SENSOR: Bad temperature F: %s", matches[7])
 			continue
 		}
 
@@ -155,8 +157,6 @@ func main() {
 		}
 		sensorLogChan <- sensorData
 	}
-	log.Print("Sensor channel closed, main() exiting in 15 seconds...")
-	time.Sleep(15 * time.Second)
-
-	close(reportChan)
+	log.Print("WARN: serial-sensor-hub shutting down in 5 seconds...")
+	time.Sleep(5 * time.Second)
 }

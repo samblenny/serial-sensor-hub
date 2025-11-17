@@ -43,7 +43,7 @@ func IRCLoadConfig(path string) (*IRCConfig, error) {
 func ircSend(conn net.Conn, msg string) error {
 	_, err := conn.Write([]byte(msg + "\r\n"))
 	if err != nil {
-		log.Printf("IRC send error: %v", err)
+		log.Printf("WARN: IRC send error: %v", err)
 	}
 	return err
 }
@@ -83,7 +83,7 @@ ConnectLoop:
 	for {
 		// Auto-close the connection so error handlers can just do a continue
 		if conn != nil {
-			log.Print("Closing IRC connection")
+			log.Print("INFO: Closing IRC connection")
 			conn.Close()
 			conn = nil
 		}
@@ -95,14 +95,14 @@ ConnectLoop:
 		select {
 		case <-ctx.Done():
 			// Handle shutdown signal
-			log.Print("Shutting down IRCBot (not connected)")
+			log.Print("INFO: Shutting down IRCBot (not connected)")
 			return
 		default:
 			// Connect
-			log.Printf("IRC: connecting to %s", cfg.Server)
+			log.Printf("INFO: IRC Connecting to %s", cfg.Server)
 			conn, err = net.Dial("tcp", cfg.Server)
 			if err != nil {
-				log.Printf("IRC connection failed: %v", err)
+				log.Printf("WARN: IRC connection failed: %v", err)
 				conn = nil
 				// Increase delay time used by the sleep at top of ConnectLoop
 				connDelay = ircNextBackoff(connDelay, maxDelay)
@@ -133,7 +133,7 @@ ConnectLoop:
 				lineChan <- scanner.Text()
 			}
 			if err := scanner.Err(); err != nil {
-				log.Printf("IRC scanner error: %v", err)
+				log.Printf("WARN: IRC scanner failed: %v", err)
 			}
 			close(lineChan)
 		}()
@@ -147,7 +147,7 @@ ConnectLoop:
 			select {
 			case <-ctx.Done():
 				// Handle shutdown signal
-				log.Print("Shutting down IRCBot (connected)")
+				log.Print("INFO: Shutting down IRCBot (connected)")
 				conn.Close()
 				return
 			case msg := <-in:
@@ -162,7 +162,7 @@ ConnectLoop:
 			case line, ok := <-lineChan:
 				// Handle a line from the IRC server
 				if !ok {
-					log.Print("IRC connection closed by server")
+					log.Print("INFO: IRC connection closed by server")
 					continue ConnectLoop
 				}
 
@@ -178,7 +178,7 @@ ConnectLoop:
 				// Respond according to the command
 				switch command {
 				case "001": // Welcome message (registration worked)
-					log.Printf("%v %v", command, params)
+					log.Printf("IRC: %v %v", command, params)
 					registered = true
 
 				case "002": // Ignore these boring startup messsages
@@ -197,32 +197,37 @@ ConnectLoop:
 				case "366":
 
 				case "433": // Nick in use, reconnect after a delay
-					log.Print(line)
+					log.Printf("IRC: %s", line)
 					connDelay = ircNextBackoff(connDelay, maxDelay)
 					continue ConnectLoop
 
+				case "442": // Not on channel (kicked by prankster?)
+					log.Printf("IRC: %s", line)
+					if strings.HasPrefix(params, cfg.Nick+" "+cfg.Channel) {
+						log.Printf("INFO: IRC 442 not in channel")
+						continue ConnectLoop
+					}
+
 				case "JOIN": // Might be our JOIN or might be somebody else's
-					log.Print(line)
+					log.Printf("IRC: %s", line)
 					nickMatch := strings.HasPrefix(prefix, ":"+cfg.Nick)
 					chanMatch := strings.HasPrefix(params, ":"+cfg.Channel)
 					if nickMatch && chanMatch {
-						log.Printf("IRC-JOINED: %s %s", cfg.Nick, cfg.Channel)
+						log.Printf("INFO: IRC %s joined %s", cfg.Nick,
+							cfg.Channel)
 						joined = true
 					}
 
 				case "PING": // Reply with PONG to keep connection alive
-					log.Print(line)
+					log.Printf("IRC: %s", line)
 					ircSend(conn, "PONG "+params)
-
-				case "PRIVMSG":
-					log.Print(line)
 
 				default:
 					if numericCmdRE.MatchString(command) {
 						// omit prefix from initial connection messages
-						log.Printf("%v %v", command, params)
+						log.Printf("IRC: %v %v", command, params)
 					} else {
-						log.Print(line)
+						log.Printf("IRC: %s", line)
 					}
 				}
 			} // end select (<-ctx, <-in, <-lineChan)
