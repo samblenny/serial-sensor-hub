@@ -4,129 +4,97 @@ package main
 
 import (
 	"bytes"
-	"image"
-	"image/color"
-	"image/draw"
-	"image/png"
-	"log"
+	"fmt"
 	"time"
 )
 
-// Generates the temperature chart as a PNG from the histories map
+// GenerateTemperatureChart creates a simple SVG temperature chart
 func GenerateTemperatureChart(histories NodeHistories) ([]byte, error) {
-	// Create a blank image (PNG)
-	width := 800
-	height := 600
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	const (
+		width      = 800
+		height     = 600
+		minTempF   = 10.0
+		maxTempF   = 110.0
+		hours      = 24
+	)
 
-	// White background; blue & orange data points
-	draw.Draw(img, img.Bounds(), &image.Uniform{color.White}, image.Point{},
-		draw.Src)
-	blue := color.RGBA{31, 119, 180, 255}   // Node 1
-	orange := color.RGBA{255, 127, 14, 255} // Node 2
+	// Right edge is now, left edge is 24 hours ago
+	latestTime := time.Now()
+	earliestTime := latestTime.Add(-hours * time.Hour)
 
-	// Plot the data for Node 1 and Node 2
-	if histories["1"] != nil {
-		plotTemperatures(img, histories["1"], blue, width, height)
-	}
-	if histories["2"] != nil {
-		plotTemperatures(img, histories["2"], orange, width, height)
+	// Coordinate transformations
+	tempToY := func(temp float64) int {
+		return height - int((temp-minTempF)/(maxTempF-minTempF)*float64(height))
 	}
 
-	// Encode the PNG image into the buffer of bytes
+	timeToX := func(t time.Time) int {
+		elapsed := t.Sub(earliestTime).Hours()
+		return int((elapsed / float64(hours)) * float64(width))
+	}
+
 	var buf bytes.Buffer
-	err := png.Encode(&buf, img)
-	if err != nil {
-		log.Printf("ERROR: Encoding PNG: %v", err)
-		return nil, err
+
+	// SVG header
+	buf.WriteString(fmt.Sprintf("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%d\" height=\"%d\">\n", width, height))
+
+	// Define reusable dot shape
+	buf.WriteString("<defs><circle id=\"d\" r=\"2\"/></defs>\n")
+
+	// White background
+	buf.WriteString(fmt.Sprintf("<rect width=\"%d\" height=\"%d\" fill=\"white\"/>\n", width, height))
+
+	// Grid lines group
+	buf.WriteString("<g stroke=\"#ddd\" stroke-width=\"1\">\n")
+
+	// Horizontal grid lines (every 10°F)
+	for temp := minTempF; temp <= maxTempF; temp += 10 {
+		y := tempToY(temp)
+		buf.WriteString(fmt.Sprintf("<line x1=\"0\" y1=\"%d\" x2=\"%d\" y2=\"%d\"/>\n", y, width, y))
 	}
-	return buf.Bytes(), nil
-}
 
-// Plot the temperature data for a node
-func plotTemperatures(img *image.RGBA, h *ReportHistory, col color.Color,
-	width, height int) {
-	if len(h.Reports) == 0 {
-		return
+	// Vertical grid lines (every 4 hours)
+	for i := 0; i <= hours/4; i++ {
+		t := earliestTime.Add(time.Duration(i*4) * time.Hour)
+		x := timeToX(t)
+		buf.WriteString(fmt.Sprintf("<line x1=\"%d\" y1=\"0\" x2=\"%d\" y2=\"%d\"/>\n", x, x, height))
 	}
 
-	// Temperature range for vertical axis
-	const minTempF = 10.0
-	const maxTempF = 110.0
+	buf.WriteString("</g>\n")
 
-	// Start/Stop times for horizontal axis (recent on right, old on left)
-	var hours time.Duration = 24
-	latestReportTime := h.Reports[len(h.Reports)-1].Timestamp
-	earliestReportTime := latestReportTime.Add(-hours * time.Hour)
+	// Plot data points by node
+	colors := map[string]string{
+		"1": "#1f77b4", // blue
+		"2": "#ff7f0e", // orange
+	}
 
-	// Draw background grid
-	gridColor := color.RGBA{169, 169, 169, 255} // light gray
-	drawGrid(img, width, height, minTempF, maxTempF, earliestReportTime,
-		latestReportTime, gridColor)
-
-	// Plot the data
-	for _, report := range h.Reports {
-		// If the report is older than 24 hours, skip it
-		if report.Timestamp.Before(earliestReportTime) {
+	for nodeID, h := range histories {
+		if len(h.Reports) == 0 {
 			continue
 		}
 
-		temp := report.TempF
-		timeDiff := latestReportTime.Sub(report.Timestamp).Hours()
-
-		// Scale and translate x coordinate for time
-		x := int((1 - (timeDiff / 24)) * float64(width))
-		if x < 0 {
-			x = 0
-		} else if x >= width {
-			x = width - 1
+		color := colors[nodeID]
+		if color == "" {
+			color = "#888888"
 		}
 
-		// Scale and translate y coordinate for temperature
-		y := height - int((temp-minTempF)/(maxTempF-minTempF)*float64(height))
-		if y < 0 {
-			y = 0
-		} else if y >= height {
-			y = height - 1
-		}
+		// Group for this node's data points
+		buf.WriteString(fmt.Sprintf("<g fill=\"%s\">\n", color))
 
-		// Draw a 3px square data point
-		drawSquare(img, x, y, col)
-	}
-}
-
-// Draw a 3px square at the given coordinates
-func drawSquare(img *image.RGBA, x, y int, c color.Color) {
-	for yy := y - 1; yy <= y+2; yy++ {
-		img.Set(x-1, yy, c)
-		img.Set(x, yy, c)
-		img.Set(x+1, yy, c)
-	}
-}
-
-// Draw grid lines on the image
-func drawGrid(img *image.RGBA, width, height int, minTempF, maxTempF float64,
-	startTime, endTime time.Time, gridColor color.Color) {
-	// Horizontal grid lines every 10°F
-	for temp := minTempF; temp <= maxTempF; temp += 10 {
-		y := height - int((temp-minTempF)/(maxTempF-minTempF)*float64(height))
-		if y >= 0 && y < height {
-			for x := 0; x < width; x++ {
-				img.Set(x, y, gridColor)
+		for _, report := range h.Reports {
+			if report.Timestamp.Before(earliestTime) {
+				continue
 			}
+
+			x := timeToX(report.Timestamp)
+			y := tempToY(report.TempF)
+
+			buf.WriteString(fmt.Sprintf("<use href=\"#d\" x=\"%d\" y=\"%d\"/>\n", x, y))
 		}
+
+		buf.WriteString("</g>\n")
 	}
 
-	// Vertical grid lines every 4 hours
-	duration := endTime.Sub(startTime)
-	for i := 0; i <= int(duration.Hours())/4; i++ {
-		gridTime := startTime.Add(time.Duration(i*4) * time.Hour)
-		timeDiff := endTime.Sub(gridTime).Hours()
-		x := int((1 - (timeDiff / 24)) * float64(width))
-		if x >= 0 && x < width {
-			for y := 0; y < height; y++ {
-				img.Set(x, y, gridColor)
-			}
-		}
-	}
+	buf.WriteString("</svg>")
+
+	return buf.Bytes(), nil
 }

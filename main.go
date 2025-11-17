@@ -228,7 +228,7 @@ func main() {
 	// Send summary of logged sensor reports for nodes 1 and 2 by IRC
 	if len(histories) > 0 {
 		// First allow time for IRC connect/register/join finish
-		time.Sleep(8 * time.Second)
+		time.Sleep(6 * time.Second)
 		// Okay, now send it
 		summary := FormatReportSummary(histories)
 		reportChan <- summary

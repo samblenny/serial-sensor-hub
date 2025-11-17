@@ -19,8 +19,8 @@ func chartHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set the response header to PNG image type
-	w.Header().Set("Content-Type", "image/png")
+	// Set the response header to SVG image type
+	w.Header().Set("Content-Type", "image/svg+xml")
 
 	// Send the chart bytes as the response
 	w.Write(chartCache.Bytes)
@@ -29,7 +29,6 @@ func chartHandler(w http.ResponseWriter, r *http.Request) {
 // Start the web server to serve the chart
 func setupWebServer() {
 	http.HandleFunc("/", chartHandler) // Register chart handler
-
 	hostport := "0.0.0.0:8080"
 	log.Printf("INFO: Starting web server on %s...", hostport)
 	if err := http.ListenAndServe(hostport, nil); err != nil {
