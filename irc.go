@@ -5,39 +5,14 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
 	"net"
-	"os"
 	"regexp"
 	"strings"
 	"time"
 )
-
-type IRCConfig struct {
-	Server  string `json:"server"`
-	Nick    string `json:"nick"`
-	Channel string `json:"channel"`
-}
-
-func IRCLoadConfig(path string) (*IRCConfig, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	dec := json.NewDecoder(f)
-
-	var cfg IRCConfig
-	if err := dec.Decode(&cfg); err != nil {
-		return nil, err
-	}
-
-	return &cfg, nil
-}
 
 // Send string to IRC server.
 func ircSend(conn net.Conn, msg string) error {
@@ -58,7 +33,7 @@ func ircNextBackoff(delay, max time.Duration) time.Duration {
 }
 
 // Forward messages from input channel to the configured IRC server
-func IRCBot(ctx context.Context, cfg *IRCConfig, in <-chan string) {
+func IRCBot(ctx context.Context, cfg *ServerConfig, in <-chan string) {
 	// Regex for parsing IRC lines: {prefix, command, params}
 	ircLineRE := regexp.MustCompile(
 		`^((:\S+)\s+)?` + // optional prefix (match group 2)

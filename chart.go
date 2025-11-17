@@ -16,12 +16,12 @@ func write(buf *bytes.Buffer, format string, args ...interface{}) {
 // GenerateTemperatureChart creates a simple SVG temperature chart
 func GenerateTemperatureChart(histories NodeHistories) ([]byte, error) {
 	const (
-		width        = 800   // Total SVG width
-		height       = 600   // Total SVG height
-		marginLeft   = 100    // Left margin for labels
-		marginTop    = 20    // Top margin for title/labels
+		width        = 1024  // Total SVG width
+		height       = 768   // Total SVG height
+		marginLeft   = 100   // Left margin for labels
+		marginTop    = 50    // Top margin for title/labels
 		marginRight  = 20    // Right margin
-		marginBottom = 150    // Bottom margin for time labels
+		marginBottom = 150   // Bottom margin for time labels
 		minTempF     = 10.0  // Minimum temperature
 		maxTempF     = 110.0 // Maximum temperature
 		tempStep     = 10    // Temperature axis grid step
@@ -33,7 +33,8 @@ func GenerateTemperatureChart(histories NodeHistories) ([]byte, error) {
 	chartWidth := width - marginLeft - marginRight
 	chartHeight := height - marginTop - marginBottom
 
-	// Right edge is now, left edge is 36 hours ago
+	// Right edge is current time rounded up to the next whole hour, left edge
+	// is 36 hours before then
 	latestTime := time.Now()
 	earliestTime := latestTime.Add(-hours * time.Hour)
 
@@ -55,84 +56,103 @@ func GenerateTemperatureChart(histories NodeHistories) ([]byte, error) {
 	// SVG header
 	write(&buf, "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%d\" height=\"%d\">\n", width, height)
 	write(&buf, `<style>
-path{stroke:#aaa;stroke-width=1px;}
-text{stroke:#000;font-size:14px;font-family:Verdana,Arial,sans-serif;text-anchor:end;}
+rect{fill:white;}
+line{stroke:#777;stroke-width=1px;}
+text{stroke:#000;font-size:16px;font-family:Verdana,Arial,sans-serif;text-anchor:end;}
+.blue{fill:#2f87b4d0;}
+.orange{fill:#ff7f0ed0;}
+text.legend{text-anchor:start;}
 </style>
 `)
 
 	// White background
-	write(&buf, "<rect width=\"%d\" height=\"%d\" fill=\"white\"/>\n", width, height)
+	write(&buf, `<rect width="%d" height="%d"/>`+"\n", width, height)
 
-	// Start path element for axis grid lines
-	write(&buf, "<path  d=\"")
-
-	// Horizontal grid line segments
+	// Horizontal grid lines and labels
+	lineFmt := `<line x1="%d" y1="%d" x2="%d" y2="%d"/>` + "\n"
 	for temp := minTempF; temp <= maxTempF; temp += tempStep {
 		y := tempToY(temp)
-		write(&buf, "\nM%d %d H %d", marginLeft, y, width-marginRight)
+		write(&buf, lineFmt, marginLeft, y, width-marginRight, y)
 	}
 
-	// Vertical grid line segments
-	for i := 0; i <= hours/hoursStep; i++ {
-		t := earliestTime.Add(time.Duration(i*hoursStep) * time.Hour)
+	// Round current time down to a multiple of 4 hours
+	hourFloor4 := int(latestTime.Hour()/4) * 4
+	lastT := time.Date(latestTime.Year(), latestTime.Month(),
+		latestTime.Day(), hourFloor4, 0, 0, 0, latestTime.Location())
+
+	// Vertical grid lines and labels. This is tricky. There are always lines
+	// at the left and right margins. But, the position of the interior lines
+	// depends on the current time. The lines always get drawn at multiples of
+	// 4 hours, so they shift around based on how far you are from noon, 4 PM,
+	// 8 PM, midnight, etc.
+	write(&buf, lineFmt, marginLeft, marginTop, marginLeft, height-marginBottom)
+	subTime := -time.Duration(hoursStep) * time.Hour
+	for t := lastT; t.After(earliestTime); t = t.Add(subTime) {
 		x := timeToX(t)
-		write(&buf, "\nM%d %d V %d", x, marginTop, height-marginBottom)
+		write(&buf, lineFmt, x, marginTop, x, height-marginBottom)
+		fmtTime := t.In(time.Local).Format("Mon 01/02 3PM")
+		xx := int(x) + 10
+		yy := int(marginTop + chartHeight + 10)
+		write(&buf,
+			`<text x="%d" y="%d" transform="rotate(-45 %d,%d)">%v</text>`+"\n",
+			xx, yy, xx, yy, fmtTime)
 	}
-
-	// Close grid line path element
-	write(&buf, "\"/>\n")
+	write(&buf, lineFmt, marginLeft+chartWidth, marginTop,
+		marginLeft+chartWidth, height-marginBottom)
 
 	// Temperature axis text labels (vertical axis, left margin)
 	for temp := minTempF; temp <= maxTempF; temp += tempStep {
 		y := tempToY(temp)
-		write(&buf, "<text x=\"%d\" y=\"%d\">%d°F</text>\n",
+		write(&buf, `<text x="%d" y="%d">%d°F</text>`+"\n",
 			int(marginLeft-5), int(y+5), int(temp))
 	}
 
-	// Time axis text labels (horizontal axis, bottom margin)
-	for i := 0; i <= hours/hoursStep; i++ {
-		t := earliestTime.Add(time.Duration(i*hoursStep) * time.Hour)
-		x := timeToX(t)
-		fmtTime := t.Format("Mon 01/02 3PM")
-		xx := int(x)+10
-		yy := int(marginTop+chartHeight+10)
-		write(&buf, "<text x=\"%d\" y=\"%d\" transform=\"rotate(-45 %d,%d)\">%v" +
-			"</text>\n", xx, yy, xx, yy, fmtTime)
-	}
+	// Define reusable circle shape
+	write(&buf, `<defs><circle id="c" r="2"/></defs>`+"\n")
 
 	// Plot data points by node
-	colors := map[string]string{
-		"1": "#2f87b4d0", // blue
-		"2": "#ff7f0ed0", // orange
-	}
-
-	// Define reusable circle shape
-	write(&buf, "<defs><circle id=\"c\" r=\"2\"/></defs>\n")
-
 	for nodeID, h := range histories {
 		if len(h.Reports) == 0 {
 			continue
 		}
 
-		color := colors[nodeID]
-		if color == "" {
-			color = "#888888"
+		// Select color by node ID
+		var colorClass string
+		var legendText string
+		var nodeIDi int
+		if nodeID == "1" {
+			colorClass = "blue"
+			legendText = cfg.Node1
+			nodeIDi = 1
+		} else if nodeID == "2" {
+			colorClass = "orange"
+			legendText = cfg.Node2
+			nodeIDi = 2
+		} else {
+			// skip nodes higher than 2
+			continue
 		}
 
-		// Group for this node's data points
-		write(&buf, "<g fill=\"%s\">\n", color)
+		// Enclose scatter plot dots in a group to share the color class
+		write(&buf, `<g class="%s">`+"\n", colorClass)
 
+		// Data series legend
+		xBase := marginLeft + ((nodeIDi - 1) * (width - marginLeft -
+			marginRight) / 2)
+		write(&buf, `<circle r="8" cx="%d" cy="%d"/>`+"\n", xBase+40,
+			marginTop-24)
+		write(&buf, `<text x="%d" y="%d" class="legend">%s: %s</text>`+"\n",
+			xBase+55, marginTop-20, nodeID, legendText)
+
+		// Scatter plot dots
 		for _, report := range h.Reports {
 			if report.Timestamp.Before(earliestTime) {
 				continue
 			}
-
 			x := timeToX(report.Timestamp)
 			y := tempToY(report.TempF)
-
-			write(&buf, "<use href=\"#c\" x=\"%d\" y=\"%d\"/>\n", x, y)
+			write(&buf, `<use href="#c" x="%d" y="%d"/>%s`, x, y, "\n")
 		}
-
 		write(&buf, "</g>\n")
 	}
 

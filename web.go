@@ -33,12 +33,13 @@ func htmlHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	// HTML content with an <img> tag that sources the SVG from "/chart.svg"
-	htmlContent := `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+	w.Write([]byte(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Temperature Chart</title></head>
-<body><img src="/chart.svg" alt="Temperature Chart" /></body></html>`
-
-	w.Write([]byte(htmlContent))
+<body><img src="/chart.svg" alt="Temperature Chart" />
+</body></html>
+`))
 }
 
 // Start the web server to serve the chart

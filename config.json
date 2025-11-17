@@ -2,5 +2,7 @@
   "comment": "EDIT THE IP ADDRESS TO MATCH YOUR SERVER",
   "server": "192.168.0.250:6667",
   "nick": "sensorbot",
-  "channel": "#sensors"
+  "channel": "#sensors",
+  "node1": "node 1 chart legend text",
+  "node2": "node 2 chart legend text"
 }

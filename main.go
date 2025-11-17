@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -41,6 +42,35 @@ var sensorReportRE = regexp.MustCompile(
 
 // Type for managing sensor report histories of multiple sensor nodes
 type NodeHistories map[string]*ReportHistory
+
+// Struct type for server config loaded from config.json
+type ServerConfig struct {
+	Server  string `json:"server"`
+	Nick    string `json:"nick"`
+	Channel string `json:"channel"`
+	Node1   string `json:"node1"` // Chart legend text for nodeID=1
+	Node2   string `json:"node2"` // Chart legend text for nodeID=2
+}
+
+// Global config struct
+var cfg ServerConfig
+
+// Load server config file into the global config struct
+func LoadServerConfig(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	dec := json.NewDecoder(f)
+
+	if err := dec.Decode(&cfg); err != nil {
+		return err
+	}
+
+	return nil
+}
 
 // Regenerate the chart and store the PNG bytes in the cache
 func regenerateChart(histories NodeHistories) {
@@ -186,10 +216,10 @@ func FormatReportSummary(histories NodeHistories) string {
 func main() {
 	log.Printf("INFO: Starting serial-sensor-hub")
 
-	// Load configuration file
-	cfg, err := IRCLoadConfig("config.json")
+	// Load configuration file into global config struct
+	err := LoadServerConfig("config.json")
 	if err != nil {
-		log.Fatalf("ERROR: Failed to load IRC config: %v", err)
+		log.Fatalf("ERROR: Failed to load server config: %v", err)
 	}
 
 	// Shutdown context for clean exit (in case of Ctrl-C or whatever)
@@ -223,7 +253,7 @@ func main() {
 	regenerateChart(histories)
 
 	// Start IRC bot goroutine (takes several seconds to connect and join)
-	go IRCBot(ctx, cfg, reportChan)
+	go IRCBot(ctx, &cfg, reportChan)
 
 	// Send summary of logged sensor reports for nodes 1 and 2 by IRC
 	if len(histories) > 0 {
