@@ -12,9 +12,23 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
+// Global variable to hold the histories map
+var histories NodeHistories
+
+// Global cache struct to hold the chart PNG data
+type ChartCache struct {
+	Bytes []byte
+	mu    sync.Mutex
+}
+
+// Global chart cache instance
+var chartCache = ChartCache{}
+
+// Regex with match groups for parsing sensor reports from USB serial stream
 var sensorReportRE = regexp.MustCompile(
 	`^(ESPNOW|LORA):\s*` + // Originating protocol from sensor gateway
 		`([^,]+),\s*` + // RSSI (float)
@@ -27,6 +41,21 @@ var sensorReportRE = regexp.MustCompile(
 
 // Type for managing sensor report histories of multiple sensor nodes
 type NodeHistories map[string]*ReportHistory
+
+// Regenerate the chart and store the PNG bytes in the cache
+func regenerateChart(histories NodeHistories) {
+	// Generate the new chart PNG bytes
+	chartBytes, err := GenerateTemperatureChart(histories)
+	if err != nil {
+		log.Printf("ERROR: Failed to generate chart: %v", err)
+		return
+	}
+
+	// Update the chart cache with the new bytes
+	chartCache.mu.Lock() // Prevent conflicts with web server
+	chartCache.Bytes = chartBytes
+	chartCache.mu.Unlock()
+}
 
 // Read sensor log files to get reports from the past `days` number of days
 func ReadSensorLogHistory(days int) (NodeHistories, error) {
@@ -190,6 +219,9 @@ func main() {
 			totalNodes, totalReports)
 	}
 
+	// Generate initial chart from historical sensor data
+	regenerateChart(histories)
+
 	// Start IRC bot goroutine (takes several seconds to connect and join)
 	go IRCBot(ctx, cfg, reportChan)
 
@@ -202,9 +234,10 @@ func main() {
 		reportChan <- summary
 	}
 
-	// Start serial port sensor monitor, IRC bot, and sensor data logger
+	// Start serial port sensor monitor, sensor data logger, and web server
 	go SerialConnect(sensorChan)
 	go StartLogger(sensorLogChan)
+	go setupWebServer()
 
 	// Start sensorChan fanout to sensor log and reportChan channel
 	for report := range sensorChan {
@@ -260,6 +293,9 @@ func main() {
 			TempF:     tempF,
 		}
 		sensorLogChan <- sensorData
+
+		// Update chart for web server
+		regenerateChart(histories)
 	}
 	log.Print("WARN: serial-sensor-hub shutting down in 5 seconds...")
 	time.Sleep(5 * time.Second)
