@@ -37,35 +37,36 @@ func GenerateTemperatureChart(histories NodeHistories) ([]byte, error) {
 	// SVG header
 	buf.WriteString(fmt.Sprintf("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%d\" height=\"%d\">\n", width, height))
 
-	// Define reusable dot shape
-	buf.WriteString("<defs><circle id=\"d\" r=\"2\"/></defs>\n")
-
 	// White background
 	buf.WriteString(fmt.Sprintf("<rect width=\"%d\" height=\"%d\" fill=\"white\"/>\n", width, height))
 
-	// Grid lines group
-	buf.WriteString("<g stroke=\"#ddd\" stroke-width=\"1\">\n")
+	// Start path element for grid lines
+	buf.WriteString("<path stroke=\"#ddd\" stroke-width=\"1\" d=\"")
 
 	// Horizontal grid lines (every 10°F)
 	for temp := minTempF; temp <= maxTempF; temp += 10 {
 		y := tempToY(temp)
-		buf.WriteString(fmt.Sprintf("<line x1=\"0\" y1=\"%d\" x2=\"%d\" y2=\"%d\"/>\n", y, width, y))
+		buf.WriteString(fmt.Sprintf("\nM0 %d H %d", y, width))
 	}
 
 	// Vertical grid lines (every 4 hours)
 	for i := 0; i <= hours/4; i++ {
 		t := earliestTime.Add(time.Duration(i*4) * time.Hour)
 		x := timeToX(t)
-		buf.WriteString(fmt.Sprintf("<line x1=\"%d\" y1=\"0\" x2=\"%d\" y2=\"%d\"/>\n", x, x, height))
+		buf.WriteString(fmt.Sprintf("\nM%d 0 V %d", x, height))
 	}
 
-	buf.WriteString("</g>\n")
+	// Close path element
+	buf.WriteString("\"/>\n")
 
 	// Plot data points by node
 	colors := map[string]string{
-		"1": "#1f77b4", // blue
-		"2": "#ff7f0e", // orange
+		"1": "#2f87b4d0", // blue
+		"2": "#ff7f0ed0", // orange
 	}
+
+	// Define reusable circle shape
+	buf.WriteString("<defs><circle id=\"c\" r=\"2\"/></defs>\n")
 
 	for nodeID, h := range histories {
 		if len(h.Reports) == 0 {
@@ -88,7 +89,7 @@ func GenerateTemperatureChart(histories NodeHistories) ([]byte, error) {
 			x := timeToX(report.Timestamp)
 			y := tempToY(report.TempF)
 
-			buf.WriteString(fmt.Sprintf("<use href=\"#d\" x=\"%d\" y=\"%d\"/>\n", x, y))
+			buf.WriteString(fmt.Sprintf("<use href=\"#c\" x=\"%d\" y=\"%d\"/>\n", x, y))
 		}
 
 		buf.WriteString("</g>\n")
