@@ -54,34 +54,63 @@ func (c *CurrentLogFile) Rotate(filePath string) error {
 	return nil
 }
 
-// Log sensor data from incoming channel to daily rotating log file
-// CAUTION: This will return early for file IO errors
-func startLogger(sensorLogChan <-chan SensorData) {
-	// Build absolute path for ./logs under server's current working directory
+// Generate sensor data log file directory from current working directory
+func getSensorLogDir() (string, error) {
+	// Get current working directory
 	cwd, err := os.Getwd()
 	if err != nil {
-		log.Printf("ERROR: Checking working directory for ./logs failed")
-		return // CAUTION!
+		return "", fmt.Errorf(
+			"ERROR: Checking current working directory failed: %v", err)
 	}
-	logDir := filepath.Join(cwd, "logs")
+	// CAUTION: This uses ./sensor-logs rather than something configurable
+	return filepath.Join(cwd, "sensor-logs"), nil
+}
 
-	// Ensure logs directory exists, creating it if needed
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		log.Printf("ERROR: Creating sensor logs directory failed: %v", err)
-		return // CAUTION!
+// Generate a log file path based on the number of `days` offset from today.
+// NOTE: This uses UTC to avoid timezone and daylight savings time troubles
+func getLogFilePathForTodayPlus(days int) (string, error) {
+	// Log file directory
+	logDir, err := getSensorLogDir()
+	if err != nil {
+		return "", err
 	}
-	log.Printf("INFO: Sensor data log directory: %s", logDir)
 
+	// Calculate relative UTC date for the log file (days=0 is today)
+	logDate := time.Now().UTC().AddDate(0, 0, days)
+
+	// Format log file path (e.g. ".../2025-11-17-UTC.csv")
+	name := fmt.Sprintf("%s-UTC.csv", logDate.Format("2006-01-02"))
+	logFilePath := filepath.Join(logDir, name)
+	return logFilePath, nil
+}
+
+// Log sensor data from incoming channel to daily rotating log file
+// CAUTION: This will return early for file IO errors
+func StartLogger(sensorLogChan <-chan SensorData) {
 	logFile := CurrentLogFile{}
+
+	// Ensure sensor log directory exists
+	logDir, err := getSensorLogDir()
+	if err != nil {
+		log.Print(err)
+		return // CAUTION!
+	}
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		log.Printf("ERROR: Creating logs directory failed: %v", err)
+		return // CAUTION!
+	}
 
 	// Log incoming sensor data channel messages
 	for sensorData := range sensorLogChan {
 
-		// This is what the log filename should be based on current time
-		logFilePath := filepath.Join(logDir,
-			fmt.Sprintf("%s-sensors.log", time.Now().Format("2006-01-02")))
+		// Get the current log file path (0 means use today's log file path)
+		logFilePath, err := getLogFilePathForTodayPlus(0)
+		if err != nil {
+			log.Print(err)
+			return // CAUTION!
+		}
 
-		// Make sure the correct log file is open and ready
+		// Ensure correct log file is open and ready
 		if logFile.File == nil || logFilePath != logFile.FilePath {
 			if err := logFile.Rotate(logFilePath); err != nil {
 				log.Print("ERROR: Rotating log file failed: %v", err)

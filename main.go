@@ -77,7 +77,7 @@ func main() {
 	// Start serial port sensor monitor, IRC bot, and sensor data logger
 	go SerialConnect(sensorChan)
 	go IRCBot(ctx, cfg, reportChan)
-	go startLogger(sensorLogChan)
+	go StartLogger(sensorLogChan)
 
 	// This map maintains a ReportHistory for each nodeID to compute 24-hour
 	// rolling min/max temperature statistics
