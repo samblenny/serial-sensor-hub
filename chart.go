@@ -8,56 +8,97 @@ import (
 	"time"
 )
 
+// Utility function to write formatted strings to a buffer
+func write(buf *bytes.Buffer, format string, args ...interface{}) {
+	buf.WriteString(fmt.Sprintf(format, args...))
+}
+
 // GenerateTemperatureChart creates a simple SVG temperature chart
 func GenerateTemperatureChart(histories NodeHistories) ([]byte, error) {
 	const (
-		width      = 800
-		height     = 600
-		minTempF   = 10.0
-		maxTempF   = 110.0
-		hours      = 24
+		width        = 800   // Total SVG width
+		height       = 600   // Total SVG height
+		marginLeft   = 100    // Left margin for labels
+		marginTop    = 20    // Top margin for title/labels
+		marginRight  = 20    // Right margin
+		marginBottom = 150    // Bottom margin for time labels
+		minTempF     = 10.0  // Minimum temperature
+		maxTempF     = 110.0 // Maximum temperature
+		tempStep     = 10    // Temperature axis grid step
+		hours        = 36    // Time range (36 hours)
+		hoursStep    = 4     // Time axis grid step
 	)
 
-	// Right edge is now, left edge is 24 hours ago
+	// Adjusted dimensions accounting for margins
+	chartWidth := width - marginLeft - marginRight
+	chartHeight := height - marginTop - marginBottom
+
+	// Right edge is now, left edge is 36 hours ago
 	latestTime := time.Now()
 	earliestTime := latestTime.Add(-hours * time.Hour)
 
 	// Coordinate transformations
 	tempToY := func(temp float64) int {
-		return height - int((temp-minTempF)/(maxTempF-minTempF)*float64(height))
+		// Scale temperature to Y position on the chart, considering the margin
+		return marginTop + chartHeight -
+			int((temp-minTempF)/(maxTempF-minTempF)*float64(chartHeight))
 	}
 
 	timeToX := func(t time.Time) int {
 		elapsed := t.Sub(earliestTime).Hours()
-		return int((elapsed / float64(hours)) * float64(width))
+		// Scale time to X position on the chart, considering the margin
+		return marginLeft + int((elapsed/float64(hours))*float64(chartWidth))
 	}
 
 	var buf bytes.Buffer
 
 	// SVG header
-	buf.WriteString(fmt.Sprintf("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%d\" height=\"%d\">\n", width, height))
+	write(&buf, "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%d\" height=\"%d\">\n", width, height)
+	write(&buf, `<style>
+path{stroke:#aaa;stroke-width=1px;}
+text{stroke:#000;font-size:14px;font-family:Verdana,Arial,sans-serif;text-anchor:end;}
+</style>
+`)
 
 	// White background
-	buf.WriteString(fmt.Sprintf("<rect width=\"%d\" height=\"%d\" fill=\"white\"/>\n", width, height))
+	write(&buf, "<rect width=\"%d\" height=\"%d\" fill=\"white\"/>\n", width, height)
 
-	// Start path element for grid lines
-	buf.WriteString("<path stroke=\"#ddd\" stroke-width=\"1\" d=\"")
+	// Start path element for axis grid lines
+	write(&buf, "<path  d=\"")
 
-	// Horizontal grid lines (every 10°F)
-	for temp := minTempF; temp <= maxTempF; temp += 10 {
+	// Horizontal grid line segments
+	for temp := minTempF; temp <= maxTempF; temp += tempStep {
 		y := tempToY(temp)
-		buf.WriteString(fmt.Sprintf("\nM0 %d H %d", y, width))
+		write(&buf, "\nM%d %d H %d", marginLeft, y, width-marginRight)
 	}
 
-	// Vertical grid lines (every 4 hours)
-	for i := 0; i <= hours/4; i++ {
-		t := earliestTime.Add(time.Duration(i*4) * time.Hour)
+	// Vertical grid line segments
+	for i := 0; i <= hours/hoursStep; i++ {
+		t := earliestTime.Add(time.Duration(i*hoursStep) * time.Hour)
 		x := timeToX(t)
-		buf.WriteString(fmt.Sprintf("\nM%d 0 V %d", x, height))
+		write(&buf, "\nM%d %d V %d", x, marginTop, height-marginBottom)
 	}
 
-	// Close path element
-	buf.WriteString("\"/>\n")
+	// Close grid line path element
+	write(&buf, "\"/>\n")
+
+	// Temperature axis text labels (vertical axis, left margin)
+	for temp := minTempF; temp <= maxTempF; temp += tempStep {
+		y := tempToY(temp)
+		write(&buf, "<text x=\"%d\" y=\"%d\">%d°F</text>\n",
+			int(marginLeft-5), int(y+5), int(temp))
+	}
+
+	// Time axis text labels (horizontal axis, bottom margin)
+	for i := 0; i <= hours/hoursStep; i++ {
+		t := earliestTime.Add(time.Duration(i*hoursStep) * time.Hour)
+		x := timeToX(t)
+		fmtTime := t.Format("Mon 01/02 3PM")
+		xx := int(x)+10
+		yy := int(marginTop+chartHeight+10)
+		write(&buf, "<text x=\"%d\" y=\"%d\" transform=\"rotate(-45 %d,%d)\">%v" +
+			"</text>\n", xx, yy, xx, yy, fmtTime)
+	}
 
 	// Plot data points by node
 	colors := map[string]string{
@@ -66,7 +107,7 @@ func GenerateTemperatureChart(histories NodeHistories) ([]byte, error) {
 	}
 
 	// Define reusable circle shape
-	buf.WriteString("<defs><circle id=\"c\" r=\"2\"/></defs>\n")
+	write(&buf, "<defs><circle id=\"c\" r=\"2\"/></defs>\n")
 
 	for nodeID, h := range histories {
 		if len(h.Reports) == 0 {
@@ -79,7 +120,7 @@ func GenerateTemperatureChart(histories NodeHistories) ([]byte, error) {
 		}
 
 		// Group for this node's data points
-		buf.WriteString(fmt.Sprintf("<g fill=\"%s\">\n", color))
+		write(&buf, "<g fill=\"%s\">\n", color)
 
 		for _, report := range h.Reports {
 			if report.Timestamp.Before(earliestTime) {
@@ -89,13 +130,13 @@ func GenerateTemperatureChart(histories NodeHistories) ([]byte, error) {
 			x := timeToX(report.Timestamp)
 			y := tempToY(report.TempF)
 
-			buf.WriteString(fmt.Sprintf("<use href=\"#c\" x=\"%d\" y=\"%d\"/>\n", x, y))
+			write(&buf, "<use href=\"#c\" x=\"%d\" y=\"%d\"/>\n", x, y)
 		}
 
-		buf.WriteString("</g>\n")
+		write(&buf, "</g>\n")
 	}
 
-	buf.WriteString("</svg>")
+	write(&buf, "</svg>")
 
 	return buf.Bytes(), nil
 }

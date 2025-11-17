@@ -13,14 +13,14 @@ type Report struct {
 	BatteryV  float64
 }
 
-// 24-hour rolling history of reports for one sensor node
+// 36-hour rolling history of reports for one sensor node
 type ReportHistory struct {
 	Reports  []Report
 	MinTempF float64
 	MaxTempF float64
 }
 
-// Add a new report and prune anything older than 24 hours.
+// Add a new report and prune anything older than 36 hours.
 // Also recomputes min and max temperatures after pruning.
 func (h *ReportHistory) Add(timestamp time.Time, batteryV, tempF float64) {
 	// Build and append the new report
@@ -31,8 +31,8 @@ func (h *ReportHistory) Add(timestamp time.Time, batteryV, tempF float64) {
 	}
 	h.Reports = append(h.Reports, r)
 
-	// Prune reports older than 24 hours
-	cutoff := time.Now().Add(-24 * time.Hour)
+	// Prune reports older than 36 hours
+	cutoff := time.Now().Add(-36 * time.Hour)
 	i := 0
 	for i < len(h.Reports) && h.Reports[i].Timestamp.Before(cutoff) {
 		i++

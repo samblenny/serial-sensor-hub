@@ -58,7 +58,7 @@ func regenerateChart(histories NodeHistories) {
 }
 
 // Read sensor log files to get reports from the past `days` number of days
-func ReadSensorLogHistory(days int) (NodeHistories, error) {
+func ReadSensorLogHistoryDays(days int) (NodeHistories, error) {
 	if days < 0 {
 		return nil, fmt.Errorf("ERROR: Expected days >= 0, got: %d", days)
 	}
@@ -164,7 +164,7 @@ func FormatReportSummary(histories NodeHistories) string {
 	return "!pre " + strings.Join(lines, "")
 }
 
-// main() reads serial sensor reports, maintains a 24-hour rolling history per
+// main() reads serial sensor reports, maintains a 36-hour rolling history per
 // node, and sends report summaries by IRC (sets topic of configured channel).
 // Example sensor reports (expected format of USB serial stream):
 //
@@ -202,8 +202,8 @@ func main() {
 	sensorLogChan := make(chan SensorData, 32)
 
 	// Try to initialize sensor node report history from recent log files.
-	// Node histories get used to compute 24-hour rolling min/max temperatures.
-	histories, err := ReadSensorLogHistory(2)
+	// Node histories get used to compute 36-hour rolling min/max temperatures.
+	histories, err := ReadSensorLogHistoryDays(3) // 3 days should be enough
 	if err != nil {
 		// Loading the old log data failed, so start from a clean slate
 		log.Print(err)
@@ -275,7 +275,7 @@ func main() {
 			histories[node] = h
 		}
 
-		// Add report to node's rolling 24h history and recompute min/max
+		// Add report to node's rolling 36h history and recompute min/max
 		timestamp := time.Now()
 		h.Add(timestamp, batteryV, tempF)
 
