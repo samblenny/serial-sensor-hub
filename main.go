@@ -252,6 +252,17 @@ func main() {
 	// Generate initial chart from historical sensor data
 	regenerateChart(histories)
 
+	// Start ticker to keep chart updated if sensors reports are absent
+	chartTicker := time.NewTicker(5 * time.Minute)
+	go func() {
+		for {
+			select {
+			case <-chartTicker.C:
+				regenerateChart(histories)
+			}
+		}
+	}()
+
 	// Start IRC bot goroutine (takes several seconds to connect and join)
 	go IRCBot(ctx, &cfg, reportChan)
 

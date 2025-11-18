@@ -53,6 +53,9 @@ func IRCBot(ctx context.Context, cfg *ServerConfig, in <-chan string) {
 	var conn net.Conn = nil
 	var err error
 
+	// Channel for incoming lines from the IRC server, when one is connected
+	lineChan := make(chan string, 64)
+
 	// Loop forever with auto-reconnect using polite exponential backoff delay
 ConnectLoop:
 	for {
@@ -102,7 +105,6 @@ ConnectLoop:
 
 		// Set up the scanner in its own goroutine so we can use its output
 		// more easily in a select alongside of <-ctx and <-in
-		lineChan := make(chan string, 64)
 		go func() {
 			for scanner.Scan() {
 				lineChan <- scanner.Text()
@@ -110,7 +112,6 @@ ConnectLoop:
 			if err := scanner.Err(); err != nil {
 				log.Printf("WARN: IRC scanner failed: %v", err)
 			}
-			close(lineChan)
 		}()
 
 		// Connected Input Loop
@@ -185,7 +186,7 @@ ConnectLoop:
 
 				case "JOIN": // Might be our JOIN or might be somebody else's
 					log.Printf("IRC: %s", line)
-					nickMatch := strings.HasPrefix(prefix, ":"+cfg.Nick)
+					nickMatch := strings.HasPrefix(prefix, ":"+cfg.Nick+"!")
 					chanMatch := strings.HasPrefix(params, ":"+cfg.Channel)
 					if nickMatch && chanMatch {
 						log.Printf("INFO: IRC %s joined %s", cfg.Nick,
