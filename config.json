@@ -3,6 +3,6 @@
   "server": "192.168.0.250:6667",
   "nick": "sensorbot",
   "channel": "#sensors",
-  "node1": "node 1 chart legend text",
-  "node2": "node 2 chart legend text"
+  "node1": "Sensor node 1",
+  "node2": "Sensor node 2"
 }
