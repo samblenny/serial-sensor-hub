@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"strconv"
@@ -48,19 +49,33 @@ img{max-width:100%;height:auto;} /* scale width on narrow screens */
 }
 
 // Start the web server to serve the chart
-func setupWebServer() {
-	// Serve the SVG chart at "/chart.svg"
-	http.HandleFunc("/chart.svg", chartHandler)
+func StartWebServer(ctx context.Context) {
+	// Map URL paths to handler functions
+	mux := http.NewServeMux()
+	mux.HandleFunc("/chart.svg", chartHandler)
+	mux.HandleFunc("/", htmlHandler)
 
-	// Serve the HTML5 page at "/"
-	http.HandleFunc("/", htmlHandler)
+	// Server will bind to all IP addresses (0.0.0.0)
+	srv := &http.Server{Addr: "0.0.0.0:8080", Handler: mux}
 
-	for {
-		hostport := "0.0.0.0:8080"
-		log.Printf("INFO: Starting web server on %s...", hostport)
-		if err := http.ListenAndServe(hostport, nil); err != nil {
-			log.Printf("WARN: web server: %v", err)
-			time.Sleep(10 * time.Second)
+	// Handler goroutine will shut down the web server when ctx is canceled
+	go func() {
+		<-ctx.Done()
+		log.Printf("DEBUG: Web server got <-ctx.Done()")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(),
+			5*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Printf("ERROR: Web server shutdown: %v", err)
 		}
+	}()
+
+	log.Printf("INFO: Web server starting on %s", srv.Addr)
+
+	// This blocks until the server is shut down
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Printf("WARN: Web server: %v", err)
 	}
+
+	log.Printf("INFO: Web server exited cleanly")
 }

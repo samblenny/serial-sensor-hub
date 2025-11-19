@@ -70,7 +70,7 @@ ConnectLoop:
 		select {
 		case <-ctx.Done():
 			// Handle shutdown signal
-			log.Print("INFO: Shutting down IRCBot (not connected)")
+			log.Print("DEBUG: IRC ConnectLoop got <-ctx.Done()")
 			return
 		default:
 			// Connect
@@ -117,6 +117,7 @@ ConnectLoop:
 			}
 			if err := scanner.Err(); err != nil {
 				log.Printf("WARN: IRC scanner failed: %v", err)
+				return
 			}
 		}()
 
@@ -129,7 +130,7 @@ ConnectLoop:
 			select {
 			case <-ctx.Done():
 				// Handle shutdown signal
-				log.Print("INFO: Shutting down IRCBot (connected)")
+				log.Print("DEBUG: IRC InputLoop got <-ctx.Done()")
 				conn.Close()
 				return
 			case msg := <-in:

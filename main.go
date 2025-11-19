@@ -10,10 +10,12 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -222,10 +224,6 @@ func main() {
 		log.Fatalf("ERROR: Failed to load server config: %v", err)
 	}
 
-	// Shutdown context for clean exit (in case of Ctrl-C or whatever)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	// Channels
 	sensorChan := make(chan string, 32)
 	reportChan := make(chan string, 32)
@@ -252,6 +250,22 @@ func main() {
 	// Generate initial chart from historical sensor data
 	regenerateChart(histories)
 
+	// Shutdown context for clean exit (in case of Ctrl-C or whatever)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // call cancel if main() exits normally
+
+	// Prepare to call cancel() in the event of Ctrl-C / SIGTERM
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sig
+		log.Printf("INFO: received interrupt; shutting down...")
+		cancel()
+		close(sensorChan)
+		close(reportChan)
+		close(sensorLogChan)
+	}()
+
 	// Start ticker to keep chart updated if sensors reports are absent
 	chartTicker := time.NewTicker(5 * time.Minute)
 	go func() {
@@ -259,6 +273,9 @@ func main() {
 			select {
 			case <-chartTicker.C:
 				regenerateChart(histories)
+			case <-ctx.Done():
+				log.Printf("DEBUG: chartTicker got <-ctx.Done()")
+				return
 			}
 		}
 	}()
@@ -276,9 +293,9 @@ func main() {
 	}
 
 	// Start serial port sensor monitor, sensor data logger, and web server
-	go SerialConnect(sensorChan)
+	go SerialConnect(ctx, sensorChan)
 	go StartLogger(sensorLogChan)
-	go setupWebServer()
+	go StartWebServer(ctx)
 
 	// Start sensorChan fanout to sensor log and reportChan channel
 	for report := range sensorChan {
@@ -338,6 +355,6 @@ func main() {
 		// Update chart for web server
 		regenerateChart(histories)
 	}
-	log.Print("WARN: serial-sensor-hub shutting down in 5 seconds...")
+	log.Print("DEBUG: end of main(); shutting down in 5 seconds...")
 	time.Sleep(5 * time.Second)
 }

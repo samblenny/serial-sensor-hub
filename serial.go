@@ -4,6 +4,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -69,7 +70,7 @@ func serialSttyConfig(port string) error {
 }
 
 // Open serial port and begin watching for sensor reports
-func serialMonitor(port string, out chan<- string) error {
+func serialMonitor(ctx context.Context, port string, out chan<- string) error {
 	if err := serialSttyConfig(port); err != nil {
 		return err
 	}
@@ -81,26 +82,60 @@ func serialMonitor(port string, out chan<- string) error {
 	defer f.Close()
 
 	re := regexp.MustCompile("(LORA|ESPNOW): .*")
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if re.MatchString(line) {
-			out <- line
+	lineCh := make(chan string)
+	errCh := make(chan error, 1) // buffer so goroutine won't block on error
+
+	// Scanner goroutine (because `for scanner.Scan()` is not cancelable)
+	go func() {
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			lineCh <- scanner.Text()
+		}
+		if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
+			errCh <- err
+		} else {
+			errCh <- nil // EOF
+		}
+		close(lineCh)
+		close(errCh)
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("DEBUG: serialMonitor got <-ctx.Done()")
+			return nil
+		case line, ok := <-lineCh:
+			if !ok {
+				// channel closed, scanner finished
+				return <-errCh
+			}
+			if re.MatchString(line) {
+				// normal happy path: we got a line of input
+				out <- line
+			}
+		case err := <-errCh:
+			// scanner encountered error
+			if err != nil {
+				return err
+			}
+			return nil
 		}
 	}
-
-	if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
-		return err
-	}
-	log.Printf("DEBUG: Serial port EOF for %s", port)
-	return nil
 }
 
 // Establish and maintain a serial connection to the serial sensor. If you
 // unplug the sensor temporarily, this should re-connect even the OS assigns
 // it to a new device file (e.g. ttyACM1 instead of ttyACM0).
-func SerialConnect(out chan<- string) {
+func SerialConnect(ctx context.Context, out chan<- string) {
 	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("DEBUG: SerialConnect got <-ctx.Done()")
+			return
+		default:
+		}
+
 		// Find serial port device filename (e.g. /dev/ttyACM0, etc)
 		port, err := serialFindPort()
 		if err != nil {
@@ -110,7 +145,7 @@ func SerialConnect(out chan<- string) {
 
 		// Monitor the serial port until there's an EOF or IO error
 		log.Printf("INFO: Monitoring %v", port)
-		if err := serialMonitor(port, out); err != nil {
+		if err := serialMonitor(ctx, port, out); err != nil {
 			log.Printf("INFO: %s disconnected: %v", port, err)
 		}
 		time.Sleep(time.Second)
