@@ -5,6 +5,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"strconv"
 )
 
 // Chart handler function to serve SVG file
@@ -13,33 +14,36 @@ func chartHandler(w http.ResponseWriter, r *http.Request) {
 	chartCache.mu.Lock()
 	defer chartCache.mu.Unlock()
 
-	// If chart cache is empty, return a 404
-	if len(chartCache.Bytes) == 0 {
-		http.Error(w, "Chart not available", http.StatusNotFound)
-		return
-	}
-
-	// Set the response header to SVG image type
+	// Set content type and length response headers for SVG image
 	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Content-Length", strconv.Itoa(len(chartCache.Bytes)))
 
-	// Send the chart bytes as the response
+	// Send response
 	w.Write(chartCache.Bytes)
 }
 
 // HTML handler function for the root path "/"
 func htmlHandler(w http.ResponseWriter, r *http.Request) {
-	// Return an HTML5 page that includes the SVG image
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-
 	// HTML content with an <img> tag that sources the SVG from "/chart.svg"
-	w.Write([]byte(`<!DOCTYPE html>
+	html := []byte(`<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Temperature Chart</title></head>
-<body><img src="/chart.svg" alt="Temperature Chart" />
+<title>Temperature Chart</title>
+<style>
+:root{color-scheme:light dark;} /* use system's dark mode setting */
+img{max-width:100%;height:auto;} /* scale width on narrow screens */
+</style>
+</head>
+<body><img src="/chart.svg" alt="Temperature Chart">
 </body></html>
-`))
+`)
+
+	// Set content type and length response headers for HTML5
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Length", strconv.Itoa(len(html)))
+
+	// Send response
+	w.Write(html)
 }
 
 // Start the web server to serve the chart

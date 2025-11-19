@@ -53,17 +53,22 @@ func GenerateTemperatureChart(histories NodeHistories) ([]byte, error) {
 
 	var buf bytes.Buffer
 
-	// SVG header
-	write(&buf, "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%d\" height=\"%d\">\n", width, height)
-	write(&buf, `<style>
+	// SVG header with styles
+	write(&buf,
+		`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="%d" height="%d" xmlns="http://www.w3.org/2000/svg" >
+<style type="text/css">
 rect{fill:white;}
 line{stroke:#777;stroke-width=1px;}
-text{stroke:#000;font-size:16px;font-family:Verdana,Arial,sans-serif;text-anchor:end;}
-.blue{fill:#2f87b4d0;}
-.orange{fill:#ff7f0ed0;}
+.blue{fill:#2f87b4d8;}
+.orange{fill:#ff7f0ed8;}
+text{fill:#000;font-size:16px;font-family:"Verdana",sans-serif;font-weight:bold;
+text-anchor:end;}
 text.legend{text-anchor:start;}
 </style>
-`)
+`, width, height)
 
 	// White background
 	write(&buf, `<rect width="%d" height="%d"/>`+"\n", width, height)
@@ -90,8 +95,8 @@ text.legend{text-anchor:start;}
 	for t := lastT; t.After(earliestTime); t = t.Add(subTime) {
 		x := timeToX(t)
 		write(&buf, lineFmt, x, marginTop, x, height-marginBottom)
-		fmtTime := t.In(time.Local).Format("Mon 01/02 3PM")
-		xx := int(x) + 10
+		fmtTime := t.In(time.Local).Format("Mon 2Jan 3pm")
+		xx := int(x) + 8
 		yy := int(marginTop + chartHeight + 10)
 		write(&buf,
 			`<text x="%d" y="%d" transform="rotate(-45 %d,%d)">%v</text>`+"\n",
@@ -108,7 +113,7 @@ text.legend{text-anchor:start;}
 	}
 
 	// Define reusable circle shape
-	write(&buf, `<defs><circle id="c" r="2"/></defs>`+"\n")
+	write(&buf, `<defs><circle id="c" cx="0" cy="0" r="2.2"/></defs>`+"\n")
 
 	// Plot data points by node
 	for nodeID, h := range histories {
@@ -140,9 +145,9 @@ text.legend{text-anchor:start;}
 		xBase := marginLeft + ((nodeIDi - 1) * (width - marginLeft -
 			marginRight) / 2)
 		write(&buf, `<circle r="8" cx="%d" cy="%d"/>`+"\n", xBase+40,
-			marginTop-24)
+			marginTop-25)
 		write(&buf, `<text x="%d" y="%d" class="legend">%s: %s</text>`+"\n",
-			xBase+55, marginTop-20, nodeID, legendText)
+			xBase+54, marginTop-19, nodeID, legendText)
 
 		// Scatter plot dots
 		for _, report := range h.Reports {
