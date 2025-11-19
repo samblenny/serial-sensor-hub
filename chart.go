@@ -18,10 +18,10 @@ func GenerateTemperatureChart(histories NodeHistories) ([]byte, error) {
 	const (
 		width        = 1024  // Total SVG width
 		height       = 768   // Total SVG height
-		marginLeft   = 100   // Left margin for labels
+		marginLeft   = 150   // Left margin for labels
 		marginTop    = 50    // Top margin for title/labels
 		marginRight  = 20    // Right margin
-		marginBottom = 150   // Bottom margin for time labels
+		marginBottom = 110   // Bottom margin for time labels
 		minTempF     = 10.0  // Minimum temperature
 		maxTempF     = 110.0 // Maximum temperature
 		tempStep     = 10    // Temperature axis grid step
@@ -99,7 +99,7 @@ text.legend{text-anchor:start;}
 		xx := int(x) + 8
 		yy := int(marginTop + chartHeight + 10)
 		write(&buf,
-			`<text x="%d" y="%d" transform="rotate(-45 %d,%d)">%v</text>`+"\n",
+			`<text x="%d" y="%d" transform="rotate(-30 %d,%d)">%v</text>`+"\n",
 			xx, yy, xx, yy, fmtTime)
 	}
 	write(&buf, lineFmt, marginLeft+chartWidth, marginTop,
@@ -108,8 +108,14 @@ text.legend{text-anchor:start;}
 	// Temperature axis text labels (vertical axis, left margin)
 	for temp := minTempF; temp <= maxTempF; temp += tempStep {
 		y := tempToY(temp)
+		offset := 5
+		if temp == minTempF {
+			offset = 0 // nudge lowest temp label upward
+		} else if temp == maxTempF {
+			offset = 10 // nudge highest temp label downward
+		}
 		write(&buf, `<text x="%d" y="%d">%d°F</text>`+"\n",
-			int(marginLeft-5), int(y+5), int(temp))
+			int(marginLeft-5), int(y+offset), int(temp))
 	}
 
 	// Define reusable circle shape
