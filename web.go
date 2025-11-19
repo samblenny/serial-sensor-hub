@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 // Chart handler function to serve SVG file
@@ -54,9 +55,12 @@ func setupWebServer() {
 	// Serve the HTML5 page at "/"
 	http.HandleFunc("/", htmlHandler)
 
-	hostport := "0.0.0.0:8080"
-	log.Printf("INFO: Starting web server on %s...", hostport)
-	if err := http.ListenAndServe(hostport, nil); err != nil {
-		log.Printf("WARN: Failed to start web server: %v", err)
+	for {
+		hostport := "0.0.0.0:8080"
+		log.Printf("INFO: Starting web server on %s...", hostport)
+		if err := http.ListenAndServe(hostport, nil); err != nil {
+			log.Printf("WARN: web server: %v", err)
+			time.Sleep(10 * time.Second)
+		}
 	}
 }

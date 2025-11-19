@@ -53,9 +53,6 @@ func IRCBot(ctx context.Context, cfg *ServerConfig, in <-chan string) {
 	var conn net.Conn = nil
 	var err error
 
-	// Channel for incoming lines from the IRC server, when one is connected
-	lineChan := make(chan string, 64)
-
 	// Loop forever with auto-reconnect using polite exponential backoff delay
 ConnectLoop:
 	for {
@@ -103,11 +100,20 @@ ConnectLoop:
 		// Begin conversation with IRC server
 		scanner := bufio.NewScanner(conn)
 
+		// Channel for incoming lines from the IRC server connection
+		lineChan := make(chan string, 64)
+
 		// Set up the scanner in its own goroutine so we can use its output
 		// more easily in a select alongside of <-ctx and <-in
 		go func() {
+			defer close(lineChan)
 			for scanner.Scan() {
-				lineChan <- scanner.Text()
+				select {
+				case lineChan <- scanner.Text():
+				case <-ctx.Done():
+					log.Printf("DEBUG: IRC scanner got <-ctx.Done()")
+					return
+				}
 			}
 			if err := scanner.Err(); err != nil {
 				log.Printf("WARN: IRC scanner failed: %v", err)
