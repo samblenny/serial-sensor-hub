@@ -127,3 +127,33 @@ To install the server as a systemd service on a Raspberry Pi:
 To check on the server you can run:
 - `systemctl status serial-sensor-hub` (see current status)
 - `journalctl -u serial-sensor-hub` (read all the log messages)
+
+
+### Update & Restart Server
+
+To update the server to a new release (assuming you previously installed it as
+described above):
+
+1. Git pull to get the updated source code:
+
+   ```bash
+   cd ~/serial-sensor-hub
+   git pull
+   ```
+
+2. Use your favorite text editor to make sure that the values in your
+   `serial-sensor-hub/config.json` config file are still correct.
+
+3. Compile the new server binary:
+
+   ```bash
+   cd ~/serial-sensor-hub
+   make serial-sensor-hub
+   ```
+
+4. Restart the service with systemd and check its status:
+
+   ```bash
+   sudo systemctl restart serial-sensor-hub
+   sudo systemctl status serial-sensor-hub
+   ```
