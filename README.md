@@ -4,8 +4,9 @@
 
 ![two-node-chart.png](two-node-chart.png)
 
-Hub to gather sensor data over USB serial, log it, chart it, and send
-notifications by IRC.
+This server acts as a hub to gather temperature reports from a USB serial
+sensor, log the reports to CSV files, chart them on a web page, and send
+updates to an IRC channel.
 
 Features:
 
@@ -13,7 +14,7 @@ Features:
    [lora-greenhouse-monitor](https://github.com/samblenny/lora-greenhouse-monitor)
    temperature sensor base station
 
-2. Log sensor reports to CSV files
+2. Log sensor reports to CSV files (`serial-sensor-hub/sensor-logs/*.csv`)
 
 3. Set the topic of an IRC channel to a sensor report summary message in the
    format supported by my
