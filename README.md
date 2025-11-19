@@ -47,6 +47,16 @@ Install instructions are at [go.dev/doc/install](https://go.dev/doc/install).
 The server is meant to run either on macOS (for dev and testing) or on a
 Raspberry Pi as a systemd service that starts each time the Pi boots up.
 
+For the server to do anything useful, you will need to prepare a CircuitPython
+board to send temperature sensor reports by USB serial and plug the board into
+the computer where you will run this server. You can use my
+[lora-greenhouse-monitor](https://github.com/samblenny/lora-greenhouse-monitor)
+project, write something of your own that imitates its sensor report format, or
+modify this server code to use a different report format.
+
+CAUTION: The server will get confused if you have more than one USB serial
+device plugged in at the same time.
+
 
 ### Run Server in Developer Mode
 
