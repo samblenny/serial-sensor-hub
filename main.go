@@ -52,6 +52,7 @@ type ServerConfig struct {
 	Channel string `json:"channel"`
 	Node1   string `json:"node1"` // Chart legend text for nodeID=1
 	Node2   string `json:"node2"` // Chart legend text for nodeID=2
+	Node3   string `json:"node3"` // Chart legend text for nodeID=3
 }
 
 // Global config struct

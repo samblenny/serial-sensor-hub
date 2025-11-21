@@ -4,5 +4,6 @@
   "nick": "sensorbot",
   "channel": "#sensors",
   "node1": "Sensor node 1",
-  "node2": "Sensor node 2"
+  "node2": "Sensor node 2",
+  "node3": "Sensor node 3"
 }
