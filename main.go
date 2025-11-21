@@ -176,7 +176,7 @@ func ReadSensorLogHistoryDays(days int) (NodeHistories, error) {
 func FormatReportSummary(histories NodeHistories) string {
 	lines := []string{}
 
-	for _, nodeID := range []string{"1", "2"} {
+	for _, nodeID := range []string{"1", "2", "3"} {
 		h, exists := histories[nodeID]
 		if !exists || len(h.Reports) == 0 {
 			// No data yet for this node
@@ -186,11 +186,11 @@ func FormatReportSummary(histories NodeHistories) string {
 		last := h.Reports[len(h.Reports)-1]
 		// Format timestamp like "Nov15 05:30", and be sure to use local time
 		localTimestamp := last.Timestamp.In(time.Local)
-		timestampStr := localTimestamp.Format("Jan02 15:04")
+		timestampStr := localTimestamp.Format("02Jan 15:04")
 		lines = append(lines,
-			fmt.Sprintf("/%.0f %.0f %.0f %.0f/  %s  %s",
+			fmt.Sprintf("/%.0f %.0f %.0f %.0f/  %s",
 				last.TempF, 100*last.BatteryV, h.MinTempF, h.MaxTempF,
-				nodeID, timestampStr))
+				timestampStr))
 	}
 
 	// Return string in "!pre /..." format for irc-display-bot
