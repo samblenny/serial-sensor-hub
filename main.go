@@ -255,12 +255,12 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() // call cancel if main() exits normally
 
-	// Prepare to call cancel() in the event of Ctrl-C / SIGTERM
+	// Prepare to call cancel() in the event of Ctrl-C / SIGTERM or SIGHUP
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {
-		<-sig
-		log.Printf("INFO: received interrupt; shutting down...")
+		s := <-sig
+		log.Printf("INFO: received signal '%s'; shutting down...", s)
 		cancel()
 		close(sensorChan)
 		close(reportChan)
@@ -356,6 +356,6 @@ func main() {
 		// Update chart for web server
 		regenerateChart(histories)
 	}
-	log.Print("DEBUG: end of main(); shutting down in 5 seconds...")
+	log.Printf("DEBUG: end of main(); shutting down in 5 seconds...")
 	time.Sleep(5 * time.Second)
 }
