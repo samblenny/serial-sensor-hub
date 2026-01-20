@@ -28,7 +28,7 @@ func GenerateTemperatureChart(histories NodeHistories) ([]byte, error) {
 		marginTop    = 50    // Top margin for title/labels
 		marginRight  = 20    // Right margin
 		marginBottom = 110   // Bottom margin for time labels
-		minTempF     = 10.0  // Minimum temperature
+		minTempF     = 0.0   // Minimum temperature
 		maxTempF     = 110.0 // Maximum temperature
 		tempStep     = 10    // Temperature axis grid step
 		hours        = 36    // Time range (36 hours)
